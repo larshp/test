@@ -1,57 +1,100 @@
-CLASS zcl_foobar DEFINITION PUBLIC FINAL CREATE PUBLIC.
+CLASS zcl_foobar DEFINITION
+  PUBLIC
+  FINAL
+  CREATE PUBLIC .
 
   PUBLIC SECTION.
+
     CLASS-METHODS clone
-      IMPORTING iv_url TYPE string
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_url TYPE string
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS refresh
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception .
     CLASS-METHODS remove
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS purge
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS new_offline
-      RAISING zcx_abapgit_exception zcx_abapgit_cancel.
-
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS remote_attach
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS remote_detach
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS remote_change
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS refresh_local_checksums
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
     CLASS-METHODS toggle_favorite
-      IMPORTING iv_key TYPE zif_abapgit_persistence=>ty_repo-key
-      RAISING   zcx_abapgit_exception.
-
+      IMPORTING
+        !iv_key TYPE zif_abapgit_persistence=>ty_repo-key
+      RAISING
+        zcx_abapgit_exception .
     CLASS-METHODS open_se80
-      IMPORTING iv_package TYPE devclass
-      RAISING   zcx_abapgit_exception.
-
+      IMPORTING
+        !iv_package TYPE devclass
+      RAISING
+        zcx_abapgit_exception .
     CLASS-METHODS transport_to_branch
-      IMPORTING iv_repository_key TYPE zif_abapgit_persistence=>ty_value
-      RAISING   zcx_abapgit_exception zcx_abapgit_cancel.
+      IMPORTING
+        !iv_repository_key TYPE zif_abapgit_persistence=>ty_value
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
+    CLASS-METHODS gui_deserialize
+      IMPORTING
+        !io_repo TYPE REF TO zcl_abapgit_repo
+      RAISING
+        zcx_abapgit_exception .
+  PRIVATE SECTION.
+
+    CLASS-METHODS popup_overwrite
+      CHANGING
+        !ct_overwrite TYPE zif_abapgit_definitions=>ty_overwrite_tt
+      RAISING
+        zcx_abapgit_exception .
+    CLASS-METHODS popup_package_overwrite
+      CHANGING
+        !ct_overwrite TYPE zif_abapgit_definitions=>ty_overwrite_tt
+      RAISING
+        zcx_abapgit_exception
+        zcx_abapgit_cancel .
 ENDCLASS.
 
 
 
-CLASS ZCL_foobar IMPLEMENTATION.
+CLASS ZCL_FOOBAR IMPLEMENTATION.
 
 
   METHOD clone.
@@ -75,13 +118,35 @@ CLASS ZCL_foobar IMPLEMENTATION.
     lo_repo->initialize( ).
     lo_repo->find_remote_dot_abapgit( ).
     lo_repo->status( ). " check for errors
-*    lo_repo->deserialize( ).
+
+    gui_deserialize( lo_repo ).
 
     zcl_abapgit_persistence_user=>get_instance( )->set_repo_show( lo_repo->get_key( ) ). " Set default repo for user
 
     COMMIT WORK.
 
   ENDMETHOD.  "clone
+
+
+  METHOD gui_deserialize.
+
+    DATA: ls_checks TYPE zif_abapgit_definitions=>ty_deserialize_checks.
+
+* find troublesome objects
+    ls_checks = io_repo->deserialize_checks( ).
+
+* and let the user decide what to do
+    TRY.
+        popup_overwrite( CHANGING ct_overwrite = ls_checks-overwrite ).
+        popup_package_overwrite( CHANGING ct_overwrite = ls_checks-warning_package ).
+      CATCH zcx_abapgit_cancel.
+        RETURN.
+    ENDTRY.
+
+* and pass decisions to deserialize
+    io_repo->deserialize( ls_checks ).
+
+  ENDMETHOD.
 
 
   METHOD new_offline.
@@ -119,6 +184,89 @@ CLASS ZCL_foobar IMPLEMENTATION.
   ENDMETHOD.  " open_se80.
 
 
+  METHOD popup_overwrite.
+
+    DATA: lt_columns  TYPE stringtab,
+          lt_selected LIKE ct_overwrite,
+          lv_column   LIKE LINE OF lt_columns.
+
+    FIELD-SYMBOLS: <ls_overwrite> LIKE LINE OF ct_overwrite.
+
+
+    IF lines( ct_overwrite ) = 0.
+      RETURN.
+    ENDIF.
+
+    lv_column = 'OBJ_TYPE'.
+    INSERT lv_column INTO TABLE lt_columns.
+    lv_column = 'OBJ_NAME'.
+    INSERT lv_column INTO TABLE lt_columns.
+
+    zcl_abapgit_popups=>popup_to_select_from_list(
+      EXPORTING
+        it_list               = ct_overwrite
+        i_header_text         = |The following Objects have been modified locally.|
+                            && | Select the Objects which should be overwritten.|
+        i_select_column_text  = 'Overwrite?'
+        it_columns_to_display = lt_columns
+      IMPORTING
+        et_list               = lt_selected ).
+* todo, it should be possible for the user to click cancel in the popup
+
+    LOOP AT ct_overwrite ASSIGNING <ls_overwrite>.
+      READ TABLE lt_selected WITH KEY
+        obj_type = <ls_overwrite>-obj_type
+        obj_name = <ls_overwrite>-obj_name
+        TRANSPORTING NO FIELDS.
+      IF sy-subrc = 0.
+        <ls_overwrite>-decision = 'Y'.
+      ELSE.
+        <ls_overwrite>-decision = 'N'.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD popup_package_overwrite.
+
+    DATA: lv_question TYPE c LENGTH 200,
+          lv_answer   TYPE c.
+
+    FIELD-SYMBOLS: <ls_overwrite> LIKE LINE OF ct_overwrite.
+
+
+    IF lines( ct_overwrite ) = 0.
+      RETURN.
+    ENDIF.
+
+    LOOP AT ct_overwrite ASSIGNING <ls_overwrite>.
+      CONCATENATE 'Overwrite object' <ls_overwrite>-obj_type <ls_overwrite>-obj_name
+        'from package' <ls_overwrite>-devclass
+        INTO lv_question SEPARATED BY space.                "#EC NOTEXT
+
+      lv_answer = zcl_abapgit_popups=>popup_to_confirm(
+        titlebar              = 'Warning'
+        text_question         = lv_question
+        text_button_1         = 'Ok'
+        icon_button_1         = 'ICON_DELETE'
+        text_button_2         = 'Cancel'
+        icon_button_2         = 'ICON_CANCEL'
+        default_button        = '2'
+        display_cancel_button = abap_false ).               "#EC NOTEXT
+
+      IF lv_answer = '2'.
+        RAISE EXCEPTION TYPE zcx_abapgit_cancel.
+      ENDIF.
+
+* todo, let the user decide yes/no/cancel
+      <ls_overwrite>-decision = 'Y'.
+
+    ENDLOOP.
+
+  ENDMETHOD.
+
+
   METHOD purge.
 
     DATA: lt_tadir    TYPE zif_abapgit_definitions=>ty_tadir_tt,
@@ -130,20 +278,13 @@ CLASS ZCL_foobar IMPLEMENTATION.
 
     lo_repo = zcl_abapgit_repo_srv=>get_instance( )->get( iv_key ).
 
-    IF lo_repo->get_local_settings( )-write_protected = abap_true.
-      zcx_abapgit_exception=>raise( 'Cannot purge. Local code is write-protected by repo config' ).
-    ENDIF.
-    IF zcl_abapgit_auth=>is_allowed( zif_abapgit_auth=>gc_authorization-uninstall ) = abap_false.
-      zcx_abapgit_exception=>raise( 'Not authorized' ).
-    ENDIF.
-
     lv_package = lo_repo->get_package( ).
     lt_tadir   = zcl_abapgit_tadir=>read( lv_package ).
 
     IF lines( lt_tadir ) > 0.
 
-      lv_question = |This will DELETE all objects in package { lv_package }|
-                 && | ({ lines( lt_tadir ) } objects) from the system|. "#EC NOTEXT
+      lv_question = |This will DELETE all objects in package { lv_package
+        } ({ lines( lt_tadir ) } objects) from the system|. "#EC NOTEXT
 
       lv_answer = zcl_abapgit_popups=>popup_to_confirm(
         titlebar              = 'Uninstall'
@@ -159,15 +300,13 @@ CLASS ZCL_foobar IMPLEMENTATION.
         RAISE EXCEPTION TYPE zcx_abapgit_cancel.
       ENDIF.
 
-      zcl_abapgit_objects=>delete( lt_tadir ).
-
     ENDIF.
 
-    zcl_abapgit_repo_srv=>get_instance( )->delete( lo_repo ).
+    zcl_abapgit_repo_srv=>get_instance( )->purge( lo_repo ).
 
     COMMIT WORK.
 
-  ENDMETHOD.  "purge
+  ENDMETHOD.
 
 
   METHOD refresh.
@@ -234,7 +373,9 @@ CLASS ZCL_foobar IMPLEMENTATION.
       RAISE EXCEPTION TYPE zcx_abapgit_cancel.
     ENDIF.
 
-    zcl_abapgit_repo_srv=>get_instance( )->switch_repo_type( iv_key = iv_key  iv_offline = abap_false ).
+    zcl_abapgit_repo_srv=>get_instance( )->switch_repo_type(
+      iv_key = iv_key
+      iv_offline = abap_false ).
 
     lo_repo ?= zcl_abapgit_repo_srv=>get_instance( )->get( iv_key ).
     lo_repo->set_url( ls_popup-url ).
@@ -267,7 +408,7 @@ CLASS ZCL_foobar IMPLEMENTATION.
 
     COMMIT WORK.
 
-  ENDMETHOD.  "remote_change
+  ENDMETHOD.
 
 
   METHOD remote_detach.
@@ -292,7 +433,7 @@ CLASS ZCL_foobar IMPLEMENTATION.
 
     COMMIT WORK.
 
-  ENDMETHOD.  "remote_detach
+  ENDMETHOD.
 
 
   METHOD remove.
@@ -305,8 +446,8 @@ CLASS ZCL_foobar IMPLEMENTATION.
 
     lo_repo     = zcl_abapgit_repo_srv=>get_instance( )->get( iv_key ).
     lv_package  = lo_repo->get_package( ).
-    lv_question = |This will remove the repository reference to the package { lv_package }|
-               && '. All objects will safely remain in the system.'.
+    lv_question = |This will remove the repository reference to the package { lv_package
+      }. All objects will safely remain in the system.|.
 
     lv_answer = zcl_abapgit_popups=>popup_to_confirm(
       titlebar              = 'Remove'
@@ -326,17 +467,18 @@ CLASS ZCL_foobar IMPLEMENTATION.
 
     COMMIT WORK.
 
-  ENDMETHOD.  "remove
+  ENDMETHOD.
 
 
   METHOD toggle_favorite.
 
     zcl_abapgit_persistence_user=>get_instance( )->toggle_favorite( iv_key ).
 
-  ENDMETHOD.  " toggle_favorite.
+  ENDMETHOD.
 
 
   METHOD transport_to_branch.
+
     DATA:
       lo_repository          TYPE REF TO zcl_abapgit_repo_online,
       lo_transport_to_branch TYPE REF TO zcl_abapgit_transport_2_branch,
@@ -365,5 +507,6 @@ CLASS ZCL_foobar IMPLEMENTATION.
       io_repository          = lo_repository
       is_transport_to_branch = ls_transport_to_branch
       it_transport_objects   = lt_transport_objects ).
+
   ENDMETHOD.
 ENDCLASS.
